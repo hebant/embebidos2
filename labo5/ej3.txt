@@ -1,0 +1,3 @@
+Ejercicio 3: #PARA MODIFICAR EL DUTY CYCLE MODIFICAR LAS SIGUIENTES LINEAS DEL  CODIGO ANTERIOR: 
+motor1_pwm.value = 0.5  # 50% de velocidad (duty cycle)
+motor2_pwm.value = 0.5  # 50% de velocidad (duty cycle)
