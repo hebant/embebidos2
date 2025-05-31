@@ -1,14 +1,15 @@
 //=============================================================
-// Código: Control de Motor DC con PWM y dirección
+// Código: Control de Motor DC con PWM y Dirección
 // Placa: EK-TM4C1294XL
+//
 // Descripción:
-// Este código hace girar un motor DC hacia adelante por 3 segundos 
-// y luego lo detiene por 3 segundos, repitiendo este ciclo infinitamente.
+// Este código controla un motor DC que gira hacia adelante durante 3 segundos 
+// y luego se detiene por 3 segundos, repitiendo este ciclo indefinidamente.
 //
 // Conexiones utilizadas:
 // - IN1 -> PA6 (control de dirección)
 // - IN2 -> PA7 (control de dirección)
-// - PWM Motor 1 -> PK4 (control de velocidad por PWM)
+// - PWM Motor 1 -> PK4 (M0PWM6 - control de velocidad)
 //=============================================================
 
 #include <stdint.h>
@@ -19,71 +20,95 @@
 #include "driverlib/pwm.h"
 #include "driverlib/pin_map.h"
 
-#define IN1_PIN GPIO_PIN_6  // PA6
-#define IN2_PIN GPIO_PIN_7  // PA7
-#define PWM1_PIN GPIO_PIN_4  // PK4 (PWM Motor 1)
+// Definición de pines
+#define IN1_PIN GPIO_PIN_6     // PA6
+#define IN2_PIN GPIO_PIN_7     // PA7
+#define PWM1_PIN GPIO_PIN_4    // PK4 (M0PWM6)
 
+//-----------------------------------------------------------------------------
+// Función: Motor_Init
+// Inicializa el PWM y los pines de dirección del motor
+//-----------------------------------------------------------------------------
 void Motor_Init(void) {
-    // Habilitar los periféricos de PWM y GPIO
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    // Habilitar periféricos
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);    // PWM0 para M0PWM6
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);   // Puerto K: PWM
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);   // Puerto A: IN1/IN2
 
+    // Esperar a que estén listos
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0));
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK));
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA));
 
-    // Configuración de los pines de PWM
-    GPIOPinConfigure(GPIO_PK4_M0PWM6);
-    GPIOPinTypePWM(GPIO_PORTK_BASE, GPIO_PIN_4);
+    // Configurar PK4 como salida PWM
+    GPIOPinConfigure(GPIO_PK4_M0PWM6);                // Mapear PK4 -> M0PWM6
+    GPIOPinTypePWM(GPIO_PORTK_BASE, PWM1_PIN);        // PWM en PK4
 
-    // Configuración de los pines de dirección del motor
+    // Configurar PA6 y PA7 como salidas digitales (dirección)
     GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN);
 
-    // Configuración de PWM
-    PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
-    uint32_t pwmClock = SysCtlClockGet() / 64;
-    uint32_t load = (pwmClock / 20000) - 1;  // PWM a 20kHz
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, load);
+    // Configurar PWM0_GEN_3 (para M0PWM6) en modo descendente sin sincronización
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_3,
+                    PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
 
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, 0);  // Motor detenido al inicio
+    // Calcular periodo para 20kHz
+    uint32_t pwmClock = SysCtlClockGet() / 64;               // Divisor = 64
+    uint32_t load = (pwmClock / 20000) - 1;                  // Frecuencia PWM = 20kHz
+
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, load);             // Establecer periodo
+
+    // Inicialmente: motor detenido
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, 0);
     PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT, true);
     PWMGenEnable(PWM0_BASE, PWM_GEN_3);
 }
 
+//-----------------------------------------------------------------------------
+// Función: Motor1_Forward
+// Gira el motor hacia adelante con el ciclo de trabajo dado
+//-----------------------------------------------------------------------------
 void Motor1_Forward(uint32_t duty) {
-    // Dirección: avanzar (AIN1=1, AIN2=0)
-    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, IN1_PIN);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, duty);
+    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, IN1_PIN);  // IN1=1, IN2=0
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, duty);              // Ciclo de trabajo
 }
 
+//-----------------------------------------------------------------------------
+// Función: Motor_Stop
+// Detiene el motor (PWM=0, IN1=0, IN2=0)
+//-----------------------------------------------------------------------------
 void Motor_Stop(void) {
-    // Motor detenido
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, 0);
     GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, 0);
 }
 
+//-----------------------------------------------------------------------------
+// Función: delaySeconds
+// Retardo bloqueante en segundos (basado en SysCtlDelay)
+//-----------------------------------------------------------------------------
 void delaySeconds(uint32_t seconds) {
-    uint32_t delayCycles = (SysCtlClockGet() * seconds);
+    uint32_t delayCycles = SysCtlClockGet() * seconds;
     while (delayCycles--) {
-        SysCtlDelay(1);  // Un ciclo de SysCtlDelay son 3 ciclos de reloj
+        SysCtlDelay(1);  // Cada SysCtlDelay equivale a 3 ciclos de reloj
     }
 }
 
+//-----------------------------------------------------------------------------
+// Función principal
+//-----------------------------------------------------------------------------
 int main(void) {
-    // Configuración del reloj del sistema a 120 MHz
-    SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
-                        SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480), 120000000);
+    // Configuración del sistema a 120 MHz
+    SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
+                       SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480, 120000000);
 
-    Motor_Init();  // Inicializar motor
+    Motor_Init();  // Inicializar módulo de motor
 
-    uint32_t duty = 4000;  // Ciclo de trabajo PWM (ajustable)
+    uint32_t duty = 4000;  // Ajustar para velocidad deseada (0 a carga máxima)
 
     while (1) {
-        Motor1_Forward(duty);  // Motor avanza 3 segundos
+        Motor1_Forward(duty);  // Motor gira hacia adelante 3 segundos
         delaySeconds(3);
 
-        Motor_Stop();          // Motor detenido 3 segundos
+        Motor_Stop();          // Motor se detiene 3 segundos
         delaySeconds(3);
     }
 }
