@@ -1,4 +1,22 @@
-#Ejercicio4: MODIFICAR EL DUTY CYCLE POR SSH:
+# =====================================================================================
+# Código para Raspberry Pi con puente H L298N y comunicación serial con Tiva C EK-TM4C1294XL
+# Funcionalidad:
+# - Recibe comandos por UART desde la Tiva para activar los motores 1 y 2.
+# - Controla los pines GPIO para direccionar y manejar velocidad con PWM.
+# - Permite modificar el ciclo de trabajo (duty cycle) de los motores en tiempo real
+#   mediante entrada por SSH sin bloquear la lectura UART.
+#
+# Conexiones utilizadas:
+# Raspberry Pi GPIO:
+#   MOTOR1_IN1 -> GPIO 17 (IN1 L298N motor 1)
+#   MOTOR1_IN2 -> GPIO 27 (IN2 L298N motor 1)
+#   MOTOR2_IN3 -> GPIO 22 (IN3 L298N motor 2)
+#   MOTOR2_IN4 -> GPIO 23 (IN4 L298N motor 2)
+#   ENA        -> GPIO 18 (PWM para motor 1)
+#   ENB        -> GPIO 19 (PWM para motor 2)
+# Comunicación serial:
+#   Puerto serie /dev/ttyACM0 a 9600 baudios con Tiva C EK-TM4C1294XL
+# =====================================================================================
 
 from gpiozero import OutputDevice, PWMOutputDevice
 from time import sleep
