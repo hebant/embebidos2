@@ -17,49 +17,52 @@
 
 #include "utils/uartstdio.c"
 
-char data[100]; // Buffer para almacenar los datos recibidos por UART
+// Buffer para almacenar los datos recibidos por UART
+char data[100]; 
 
 int main(void)
 {
-    // Configurar la frecuencia del sistema a 120 MHz
+    // Configurar la frecuencia del sistema a 120 MHz usando cristal de 25 MHz y PLL
     SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480), 120000000);
     
-    // Habilitar los perifericos UART0 y el puerto GPIOA
+    // Habilitar los perifericos UART0 y el puerto GPIOA para UART
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ); // Habilitar GPIOJ para los botones de usuario
     
-    // Configurar los pines PA0 y PA1 para comunicacion UART0
+    // Habilitar GPIOJ para los botones de usuario
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
+    
+    // Configurar los pines PA0 y PA1 para comunicacion UART0 (RX y TX)
     GPIOPinConfigure(GPIO_PA0_U0RX);
     GPIOPinConfigure(GPIO_PA1_U0TX);
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     
-    // Configurar botones de usuario en PJ0 y PJ1 como entradas con pull-up
+    // Configurar botones de usuario en PJ0 y PJ1 como entradas con resistencia pull-up interna
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     
-    // Configurar UART0 con una velocidad de 9600 baudios
+    // Configurar UART0 con una velocidad de 9600 baudios para la comunicación serial
     UARTStdioConfig(0, 9600, 120000000);
     
     while (1)
     {
-        // Verificar si hay caracteres disponibles en UART0
+        // Verificar si hay caracteres disponibles para leer en UART0
         if (UARTCharsAvail(UART0_BASE)) {
-            UARTgets(data, 100); // Leer los datos recibidos
-            strcat(data, " desde Tiva\n"); // Agregar mensaje al final del texto recibido
-            UARTprintf(data); // Enviar el mensaje de vuelta por UART
+            UARTgets(data, 100);             // Leer los datos recibidos por UART (hasta 100 caracteres)
+            strcat(data, " desde Tiva\n");  // Agregar el texto " desde Tiva" al final de la cadena recibida
+            UARTprintf(data);                // Enviar el mensaje modificado de vuelta por UART
         }
         
-        // Verificar si se presiona el boton de usuario 1 (PJ0)
+        // Verificar si se presiona el boton de usuario 1 conectado a PJ0
         if (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0) == 0) {
-            UARTprintf("motor1\n"); // Enviar mensaje "motor1"
-            SysCtlDelay(12000000); // Pequeña pausa para evitar rebotes
+            UARTprintf("motor1\n");          // Enviar la cadena "motor1" por UART
+            SysCtlDelay(12000000);           // Esperar un tiempo para evitar rebotes del botón (delay ~0.1s)
         }
         
-        // Verificar si se presiona el boton de usuario 2 (PJ1)
+        // Verificar si se presiona el boton de usuario 2 conectado a PJ1
         if (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0) {
-            UARTprintf("motor2\n"); // Enviar mensaje "motor2"
-            SysCtlDelay(12000000); // Pequeña pausa para evitar rebotes
+            UARTprintf("motor2\n");          // Enviar la cadena "motor2" por UART
+            SysCtlDelay(12000000);           // Esperar un tiempo para evitar rebotes del botón (delay ~0.1s)
         }
     }
 }
