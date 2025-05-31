@@ -1,6 +1,21 @@
 /*
- * Este codigo configura y utiliza la comunicacion UART en la EK-TM4C1294XL.
- * Recibe datos a traves de UART0, les agrega el mensaje " desde Tiva", y los reenvia.
+ * ========================================================================================
+ * Código para EK-TM4C1294XL que configura y utiliza la comunicación UART0.
+ * 
+ * Funcionalidad:
+ * - Inicializa el sistema con reloj a 120 MHz.
+ * - Configura UART0 en los pines PA0 (RX) y PA1 (TX) a 9600 baudios.
+ * - En el ciclo principal, recibe datos por UART0, agrega el texto " desde Tiva\n" al final
+ *   del mensaje recibido y lo retransmite por UART0.
+ * 
+ * Conexiones utilizadas:
+ * - UART0 RX: PA0
+ * - UART0 TX: PA1
+ * 
+ * Comentarios:
+ * - El buffer 'data' de 100 bytes almacena la cadena recibida.
+ * - Se usa la librería uartstdio para simplificar la comunicación UART.
+ * ========================================================================================
  */
 
 #include <stdint.h>
