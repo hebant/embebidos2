@@ -1,66 +1,77 @@
-# ------------------------------------------------------------
+# =============================================================================================
 # Proyecto: Control de Temperatura Automático (Simulado) con Raspberry Pi
 #
 # Descripción:
-# Este código simula el control de temperatura en una sala.
-# - El usuario ingresa manualmente el valor de temperatura.
-# - Si la temperatura es mayor a 20°C se activa un ventilador (Cooler),
-#   controlado mediante un puente H (Motor DC).
-# - Si la temperatura es menor a 2°C se activa un LED rojo (Heater).
-# - Si está entre 2°C y 20°C todo se apaga.
+# Este programa simula un sistema automático de control de temperatura para una sala.
+# - Si la temperatura ingresada es mayor a 20°C, se activa un ventilador (motor DC) usando
+#   un puente H (controlado por los pines GPIO 5 y 6).
+# - Si la temperatura es menor a 2°C, se enciende un LED rojo (simula un calefactor).
+# - Si la temperatura está entre 2°C y 20°C, todo se apaga.
+#
+# Este código permite comprobar visualmente (con motor y LED) el funcionamiento de un sistema
+# de climatización básico controlado por temperatura.
 #
 # Conexiones:
-# Ventilador (Motor DC controlado con Puente H):
-#   - IN1 -> GPIO 5
-#   - IN2 -> GPIO 6
+# Ventilador (Motor DC con Puente H):
+#   - IN1 -> GPIO 5 (Pin físico 29)
+#   - IN2 -> GPIO 6 (Pin físico 31)
 #
 # LED Rojo (Heater):
-#   - Ánodo (+) -> Resistencia -> GPIO 27
+#   - Ánodo (+) -> Resistencia -> GPIO 27 (Pin físico 13)
 #   - Cátodo (-) -> GND
 #
-# ------------------------------------------------------------
+# Librerías utilizadas:
+#   - RPi.GPIO: Para manejar los pines GPIO de la Raspberry Pi.
+#   - time: Para generar retardos.
+#
+# Autor: Heber
+# =============================================================================================
 
 import RPi.GPIO as GPIO
 import time
 
-# Configuración de los pines
-IN1 = 5   # Control Motor - Puente H
-IN2 = 6   # Control Motor - Puente H
-HEATER = 27  # LED rojo
+# --------------------------- Configuración de Pines ---------------------------
+IN1 = 5       # Pin GPIO para dirección del motor (ventilador)
+IN2 = 6       # Pin GPIO para dirección contraria del motor (no se usa en reversa aquí)
+HEATER = 27   # Pin GPIO conectado al LED rojo que simula el calefactor
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(IN1, GPIO.OUT)
-GPIO.setup(IN2, GPIO.OUT)
-GPIO.setup(HEATER, GPIO.OUT)
+# --------------------------- Inicialización GPIO ------------------------------
+GPIO.setmode(GPIO.BCM)          # Usar numeración BCM (número GPIO)
+GPIO.setup(IN1, GPIO.OUT)       # Configurar IN1 como salida
+GPIO.setup(IN2, GPIO.OUT)       # Configurar IN2 como salida
+GPIO.setup(HEATER, GPIO.OUT)    # Configurar HEATER como salida
 
+# --------------------------- Mensaje inicial -------------------------------
 print("----- Sistema de Control de Temperatura -----")
 
+# --------------------------- Bucle principal -------------------------------
 try:
     while True:
-        temperatura = float(input("Ingrese la temperatura (°C): "))
+        temperatura = float(input("Ingrese la temperatura (°C): "))  # Entrada del usuario
 
         if temperatura > 20:
             print("Temperatura alta - Activando ventilador (Motor).")
-            GPIO.output(IN1, True)
-            GPIO.output(IN2, False)
-            GPIO.output(HEATER, False)
+            GPIO.output(IN1, True)     # Gira en una dirección (activa el ventilador)
+            GPIO.output(IN2, False)    # Dirección única
+            GPIO.output(HEATER, False) # Heater apagado
 
         elif temperatura < 2:
             print("Temperatura baja - Activando LED rojo (Heater).")
-            GPIO.output(HEATER, True)
-            GPIO.output(IN1, False)
+            GPIO.output(HEATER, True)  # Encender calefactor (LED)
+            GPIO.output(IN1, False)    # Apagar motor
             GPIO.output(IN2, False)
 
         else:
-            print("Temperatura dentro del rango adecuado.")
-            GPIO.output(IN1, False)
+            print("Temperatura dentro del rango adecuado. Todo apagado.")
+            GPIO.output(IN1, False)    # Apagar motor
             GPIO.output(IN2, False)
-            GPIO.output(HEATER, False)
+            GPIO.output(HEATER, False) # Apagar calefactor
 
-        time.sleep(1)
+        time.sleep(1)  # Esperar antes de nueva lectura
 
+# --------------------------- Salida segura del programa --------------------
 except KeyboardInterrupt:
-    print("Finalizando programa...")
+    print("\nFinalizando programa...")
 
 finally:
-    GPIO.cleanup()
+    GPIO.cleanup()  # Liberar recursos GPIO
