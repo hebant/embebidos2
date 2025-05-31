@@ -1,3 +1,18 @@
+"""
+Código para Raspberry Pi que recibe comandos UART desde la placa Tiva C EK-TM4C1294XL
+y controla dos motores DC usando puente H L298N.
+
+Funcionalidad principal:
+- Recibe comandos UART (motor1, motor2, motor1_speed_X, motor2_speed_X).
+- Activa los motores con dirección y velocidad ajustable.
+- Usa PWM para controlar velocidad.
+
+Conexiones:
+- Motor 1: IN1->GPIO17, IN2->GPIO27, ENA(PWM)->GPIO18
+- Motor 2: IN3->GPIO22, IN4->GPIO23, ENB(PWM)->GPIO19
+- Comunicación serial UART en /dev/ttyACM0 a 9600 baudios
+"""
+
 from gpiozero import OutputDevice, PWMOutputDevice
 from time import sleep
 import serial
