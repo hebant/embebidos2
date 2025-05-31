@@ -40,20 +40,20 @@ Configuraciones:
 #include "driverlib/pwm.h"
 #include "utils/uartstdio.c"
 
-// Definiciones de pines
-#define TRIG_PIN GPIO_PIN_2     // PB2
-#define ECHO_PIN GPIO_PIN_3     // PB3
-#define IN1_PIN GPIO_PIN_6      // PA6
-#define IN2_PIN GPIO_PIN_7      // PA7
-#define PWM1_PIN GPIO_PIN_1     // PF1 (PWM Motor 1 - M0PWM1)
+// Definiciones de pines para facilitar su uso y mantenimiento
+#define TRIG_PIN GPIO_PIN_2     // Pin para disparar el sensor ultrasónico (PB2)
+#define ECHO_PIN GPIO_PIN_3     // Pin para recibir eco ultrasónico (PB3)
+#define IN1_PIN GPIO_PIN_6      // Pin de dirección motor IN1 (PA6)
+#define IN2_PIN GPIO_PIN_7      // Pin de dirección motor IN2 (PA7)
+#define PWM1_PIN GPIO_PIN_1     // Pin PWM para motor (PF1, PWM módulo 0 salida 1)
 
-// Variables globales
-char uartBuffer[100];           // Buffer para UART
-uint32_t adcValue;              // Valor ADC
-uint32_t motorDutyCycle = 0;    // Ciclo de trabajo del motor (se calculará del ADC)
-const uint32_t PWM_PERIOD = 1700; // Periodo PWM para ~20kHz
+// Variables globales usadas en todo el programa
+char uartBuffer[100];           // Buffer para almacenar cadenas recibidas por UART
+uint32_t adcValue;              // Variable para almacenar valor leído del ADC
+uint32_t motorDutyCycle = 0;    // Ciclo de trabajo para PWM del motor, basado en adcValue
+const uint32_t PWM_PERIOD = 1700; // Periodo PWM para frecuencia de ~20kHz
 
-// Prototipos de funciones
+// Prototipos de funciones para inicialización y control
 void SystemClock_Init(void);
 void UART_Init(void);
 void ADC_Init(void);
@@ -69,7 +69,7 @@ uint32_t MapADCToPWM(uint32_t adcVal);
 
 int main(void)
 {
-    // Inicialización de periféricos
+    // Inicializar todos los periféricos antes del ciclo principal
     SystemClock_Init();
     UART_Init();
     ADC_Init();
@@ -79,85 +79,84 @@ int main(void)
 
     while(1)
     {
-        // 1. Manejo de UART (recepción y respuesta)
+        // 1. Manejar comunicación UART: si hay datos disponibles, leerlos y responder
         if(UARTCharsAvail(UART0_BASE))
         {
-            UARTgets(uartBuffer, sizeof(uartBuffer));
-            strcat(uartBuffer, " desde Tiva\n");
-            UARTprintf(uartBuffer);
+            UARTgets(uartBuffer, sizeof(uartBuffer));  // Leer cadena desde UART
+            strcat(uartBuffer, " desde Tiva\n");       // Añadir mensaje extra
+            UARTprintf(uartBuffer);                     // Enviar respuesta por UART
         }
 
-        // 2. Lectura de botones
-        if(GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0) == 0)
+        // 2. Lectura de botones conectados a PJ0 y PJ1 con debounce básico
+        if(GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0) == 0) // Botón 1 presionado (activo bajo)
         {
             UARTprintf("Botón 1 presionado\n");
-            DelayMilliseconds(100);
+            DelayMilliseconds(100);  // Retardo para evitar rebotes
         }
 
-        if(GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0)
+        if(GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0) // Botón 2 presionado
         {
             UARTprintf("Botón 2 presionado\n");
             DelayMilliseconds(100);
         }
 
-        // 3. Lectura ADC y control de LEDs/Buzzer/Motor
-        ADCProcessorTrigger(ADC0_BASE, 3);
-        while(!ADCIntStatus(ADC0_BASE, 3, false));
-        ADCIntClear(ADC0_BASE, 3);
-        ADCSequenceDataGet(ADC0_BASE, 3, &adcValue);
+        // 3. Leer ADC para obtener valor del potenciómetro y controlar LEDs, buzzer y motor
+        ADCProcessorTrigger(ADC0_BASE, 3);              // Iniciar conversión ADC
+        while(!ADCIntStatus(ADC0_BASE, 3, false));      // Esperar que termine conversión
+        ADCIntClear(ADC0_BASE, 3);                       // Limpiar bandera de interrupción
+        ADCSequenceDataGet(ADC0_BASE, 3, &adcValue);    // Leer dato ADC
         
-        // Mapear valor ADC (0-4095) a PWM (0-1700)
+        // Mapear valor ADC (0-4095) a ciclo PWM (0-1700)
         motorDutyCycle = MapADCToPWM(adcValue);
         
-        UARTprintf("ADC: %d, PWM: %d\n", adcValue, motorDutyCycle);
+        UARTprintf("ADC: %d, PWM: %d\n", adcValue, motorDutyCycle); // Enviar datos por UART
         
-        // Control de LEDs y buzzer
+        // Control de LEDs y buzzer según valor del ADC (>2047 prende LEDs y buzzer)
         if(adcValue > 2047)
         {
+            // Encender LEDs en PN0, PN1 y PF0, PF4, y buzzer en PN4
             GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_PIN_0 | GPIO_PIN_1);
             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4, GPIO_PIN_0 | GPIO_PIN_4);
             GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, GPIO_PIN_4); // Buzzer ON
         }
         else
         {
+            // Apagar LEDs y buzzer
             GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1, 0);
             GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4, 0);
             GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, 0); // Buzzer OFF
         }
 
-        // 4. Medición ultrasónica y control del motor
+        // 4. Medir distancia con sensor ultrasónico y controlar motor en consecuencia
         uint32_t distance = MeasureDistance();
         UARTprintf("Distancia: %d cm\n", distance);
         
         if(distance > 10) {
-            Motor_Forward(motorDutyCycle);
+            Motor_Forward(motorDutyCycle); // Si distancia segura, avanzar motor con velocidad según ADC
         } else {
-            Motor_Stop();
+            Motor_Stop();                  // Obstáculo cercano, detener motor
             UARTprintf("Obstáculo cercano - Motor detenido\n");
         }
 
-        DelayMilliseconds(100); // Pequeña pausa entre iteraciones
+        DelayMilliseconds(100); // Pausa entre iteraciones para estabilidad
     }
 }
 
-// Mapea el valor ADC (0-4095) al rango PWM (0-PWM_PERIOD)
+// Función para mapear el valor ADC (0-4095) a ciclo PWM (0-PWM_PERIOD)
 uint32_t MapADCToPWM(uint32_t adcVal)
 {
-    // Asegurarnos que el valor ADC no exceda el máximo
-    if(adcVal > 4095) adcVal = 4095;
-    
-    // Mapear linealmente 0-4095 a 0-PWM_PERIOD
-    return (adcVal * PWM_PERIOD) / 4095;
+    if(adcVal > 4095) adcVal = 4095; // Limitar máximo valor ADC
+    return (adcVal * PWM_PERIOD) / 4095; // Escalar linealmente a PWM_PERIOD
 }
 
-// Implementación de funciones (el resto permanece igual que en la versión anterior)
-
+// Inicializa reloj del sistema a 120 MHz usando cristal externo y PLL
 void SystemClock_Init(void)
 {
     SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | 
                       SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480, 120000000);
 }
 
+// Inicializa UART0 en GPIO PA0 (RX) y PA1 (TX) con 9600 baudios para comunicación serial
 void UART_Init(void)
 {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
@@ -170,34 +169,36 @@ void UART_Init(void)
     UARTStdioConfig(0, 9600, 120000000);
 }
 
+// Inicializa ADC0 en canal 19 (PK3) para lectura analógica del potenciómetro
 void ADC_Init(void)
 {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
     
-    GPIOPinTypeADC(GPIO_PORTK_BASE, GPIO_PIN_3);
-    ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
+    GPIOPinTypeADC(GPIO_PORTK_BASE, GPIO_PIN_3); // PK3 como entrada ADC
+    ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0); // Secuencia 3
     ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_CH19 | ADC_CTL_IE | ADC_CTL_END);
     ADCSequenceEnable(ADC0_BASE, 3);
     ADCIntClear(ADC0_BASE, 3);
 }
 
+// Inicializa GPIO para botones en PJ0 y PJ1, LEDs en PN0, PN1, PF0, PF4, y buzzer en PN4
 void GPIO_Init(void)
 {
-    // Habilitar periféricos GPIO
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
     
-    // Configurar botones (PJ0 y PJ1 con pull-up)
+    // Configurar botones como entradas con resistencia pull-up interna
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     
-    // Configurar LEDs y buzzer como salidas
+    // Configurar LEDs y buzzer como salidas digitales
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_4);
     GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4);
 }
 
+// Inicializa GPIO para sensor ultrasónico: PB2 (Trig) salida, PB3 (Echo) entrada
 void Ultrasonic_Init(void)
 {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
@@ -206,6 +207,7 @@ void Ultrasonic_Init(void)
     GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, ECHO_PIN);
 }
 
+// Inicializa PWM para control del motor en PF1 y GPIO para dirección en PA6 y PA7
 void Motor_Init(void)
 {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
@@ -216,51 +218,51 @@ void Motor_Init(void)
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF));
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA));
     
-    // Configurar PWM para motor en PF1 (M0PWM1)
-    GPIOPinConfigure(GPIO_PF1_M0PWM1);
+    GPIOPinConfigure(GPIO_PF1_M0PWM1);    // Configurar pin PF1 para función PWM módulo 0 salida 1
     GPIOPinTypePWM(GPIO_PORTF_BASE, PWM1_PIN);
     
-    // Configurar pines de dirección del motor
-    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN);
+    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN); // Pines dirección motor como salidas
     
-    // Configurar generador de PWM (usando GEN_0 para M0PWM1)
-    PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, PWM_PERIOD);  // Periodo para ~20kHz
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC); // Modo PWM
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, PWM_PERIOD);  // Establecer periodo PWM (frecuencia)
     
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);  // Inicialmente detenido
-    PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
-    PWMGenEnable(PWM0_BASE, PWM_GEN_0);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);  // Ciclo inicial 0% (motor apagado)
+    PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true); // Activar salida PWM
+    PWMGenEnable(PWM0_BASE, PWM_GEN_0);             // Habilitar generador PWM
 }
 
+// Función para avanzar motor en dirección adelante con ciclo de trabajo dado
 void Motor_Forward(uint32_t duty)
 {
-    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, IN1_PIN);  // Sentido adelante
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, duty);
+    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, IN1_PIN);  // IN1=1, IN2=0 -> avance
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, duty);              // Ajustar ciclo PWM velocidad
 }
 
+// Función para detener motor (PWM en 0 y apagar dirección)
 void Motor_Stop(void)
 {
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);
-    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, 0);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);                 // Ciclo PWM 0%
+    GPIOPinWrite(GPIO_PORTA_BASE, IN1_PIN | IN2_PIN, 0);       // Apagar pines dirección
 }
 
+// Función para medir distancia con sensor ultrasónico HC-SR04
 uint32_t MeasureDistance(void)
 {
     uint32_t pulseWidth = 0;
     
-    // Generar pulso de trigger
+    // Generar pulso trigger de 10us para iniciar medición
     GPIOPinWrite(GPIO_PORTB_BASE, TRIG_PIN, 0);
     DelayMicroseconds(2);
     GPIOPinWrite(GPIO_PORTB_BASE, TRIG_PIN, TRIG_PIN);
     DelayMicroseconds(10);
     GPIOPinWrite(GPIO_PORTB_BASE, TRIG_PIN, 0);
     
-    // Esperar flanco de subida en Echo
+    // Esperar hasta que pin Echo suba (inicio del pulso)
     uint32_t timeout = 300000;
     while((GPIOPinRead(GPIO_PORTB_BASE, ECHO_PIN) == 0) && timeout--);
-    if(timeout == 0) return 0;
+    if(timeout == 0) return 0;  // Timeout, no se detectó eco
     
-    // Medir ancho del pulso
+    // Medir duración del pulso Echo (ancho de pulso)
     pulseWidth = 0;
     timeout = 300000;
     while((GPIOPinRead(GPIO_PORTB_BASE, ECHO_PIN) != 0) && timeout--) {
@@ -268,16 +270,20 @@ uint32_t MeasureDistance(void)
         pulseWidth++;
     }
     
-    if(timeout == 0) return 0;
+    if(timeout == 0) return 0; // Timeout, pulso demasiado largo
     
-    return (pulseWidth * 0.0343); // Convertir a cm
+    // Convertir ancho de pulso a distancia en cm
+    return (pulseWidth * 0.0343); // Velocidad sonido: 343 m/s = 0.0343 cm/us
 }
 
+// Función para retardos aproximados en microsegundos (no exacto)
 void DelayMicroseconds(uint32_t us)
 {
+    // SysCtlDelay = 3 ciclos de reloj por iteración
     SysCtlDelay((SysCtlClockGet() / 3000000) * us);
 }
 
+// Función para retardos en milisegundos usando DelayMicroseconds
 void DelayMilliseconds(uint32_t ms)
 {
     SysCtlDelay((SysCtlClockGet() / 3000) * ms);
